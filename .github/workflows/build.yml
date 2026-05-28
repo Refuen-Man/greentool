@@ -20,9 +20,9 @@ jobs:
           cache: npm
 
       - name: Remove China mirror config for CI
-        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){}"
+        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){};try{require('fs').unlinkSync('package-lock.json')}catch(e){}"
 
-      - run: npm ci
+      - run: npm install
 
       - name: Build & Package (Windows)
         run: npm run package:win
@@ -46,9 +46,9 @@ jobs:
           cache: npm
 
       - name: Remove China mirror config for CI
-        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){}"
+        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){};try{require('fs').unlinkSync('package-lock.json')}catch(e){}"
 
-      - run: npm ci
+      - run: npm install
 
       - name: Build & Package (macOS x64 + arm64)
         run: npm run package:mac
