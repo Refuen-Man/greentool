@@ -17,21 +17,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      - name: Remove China mirror config for CI
-        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){};try{require('fs').unlinkSync('package-lock.json')}catch(e){}"
+      - name: Install deps (use default npm registry)
+        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){}"; npm install
+        env:
+          npm_config_registry: https://registry.npmjs.org/
 
-      - run: npm install
+      - run: npm run build
 
-      - name: Build & Package (Windows)
-        run: npm run package:win
+      - name: Package Windows (NSIS)
+        run: npx electron-builder --win
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - uses: actions/upload-artifact@v4
         with:
-          name: 绿鹦鹉工具箱-Windows
+          name: gpt-Windows
           path: dist/*.exe
           if-no-files-found: error
 
@@ -43,21 +44,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      - name: Remove China mirror config for CI
-        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){};try{require('fs').unlinkSync('package-lock.json')}catch(e){}"
+      - name: Install deps (use default npm registry)
+        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){}" && npm install
+        env:
+          npm_config_registry: https://registry.npmjs.org/
 
-      - run: npm install
+      - run: npm run build
 
-      - name: Build & Package (macOS x64 + arm64)
-        run: npm run package:mac
+      - name: Package macOS (DMG x64+arm64)
+        run: npx electron-builder --mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_FOR_PULL_REQUEST: true
 
       - uses: actions/upload-artifact@v4
         with:
-          name: 绿鹦鹉工具箱-macOS
+          name: gpt-macOS
           path: dist/*.dmg
           if-no-files-found: error
