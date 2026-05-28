@@ -2,6 +2,7 @@
   "name": "green-parrot-toolbox",
   "version": "1.0.0",
   "description": "绿鹦鹉工具箱 - 快速盖章桌面应用",
+  "author": "Refuen-Man",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
