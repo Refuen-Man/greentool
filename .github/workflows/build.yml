@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -15,6 +18,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Remove China mirror config for CI
+        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){}"
 
       - run: npm ci
 
@@ -38,6 +44,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Remove China mirror config for CI
+        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){}"
 
       - run: npm ci
 
