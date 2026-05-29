@@ -18,16 +18,20 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install deps (use default npm registry)
-        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){}"; npm install
+      - name: Install dependencies
+        run: |
+          node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){}"
+          node -e "try{require('fs').unlinkSync('package-lock.json')}catch(e){}"
+          npm install
         env:
-          npm_config_registry: https://registry.npmjs.org/
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - run: npm run build
 
-      - name: Package Windows (NSIS)
-        run: npx electron-builder --win
+      - name: Package (NSIS installer)
+        run: npm exec electron-builder -- --win
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - uses: actions/upload-artifact@v4
@@ -45,16 +49,19 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install deps (use default npm registry)
-        run: node -e "try{require('fs').unlinkSync('.npmrc')}catch(e){}" && npm install
+      - name: Install dependencies
+        run: |
+          rm -f .npmrc package-lock.json
+          npm install
         env:
-          npm_config_registry: https://registry.npmjs.org/
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - run: npm run build
 
-      - name: Package macOS (DMG x64+arm64)
-        run: npx electron-builder --mac
+      - name: Package (DMG x64 + arm64)
+        run: npm exec electron-builder -- --mac
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_FOR_PULL_REQUEST: true
 
