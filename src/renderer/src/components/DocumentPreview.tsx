@@ -309,7 +309,6 @@ export default function DocumentPreview() {
             style={{
               width: pageW,
               padding: 20,
-              fontSize: 13, color: '#1e293b',
               transform: `translateY(-${currentPage * pageH}px)`
             }}
             dangerouslySetInnerHTML={{ __html: excelHtml }}
