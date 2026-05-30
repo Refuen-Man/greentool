@@ -107,17 +107,35 @@ export default function DocumentPreview() {
 
   const loadDocument = async () => {
     if (!document) return
+
+    // 数据校验：base64 数据必须存在
+    if (!document.data || typeof document.data !== 'string' || document.data.length === 0) {
+      setError('文件数据读取失败，请重新导入文档')
+      return
+    }
+
     setLoading(true)
     setImageUrl('')
     setWordHtml('')
     setExcelHtml('')
     setError('')
 
+    // Word/Excel 文档直接设定 A4 尺寸，不等待 measure（避免 canvas-wrapper 尺寸为 0）
+    if (document.type === 'word' || document.type === 'excel') {
+      const pw = a4Landscape ? A4_LANDSCAPE_WIDTH : A4_PORTRAIT_WIDTH
+      const ph = a4Landscape ? A4_LANDSCAPE_HEIGHT : A4_PORTRAIT_HEIGHT
+      setDocumentNaturalSize(pw, ph)
+    }
+
     try {
       if (document.type === 'pdf') {
         await renderPdfPage(document.data, currentPage)
       } else if (document.type === 'word') {
-        // 使用缓存的解析结果，避免重复调用 parseWord
+        // 区分 .doc 和 .docx
+        if (document.ext === 'doc') {
+          setError('旧版 .doc 格式不支持，请使用 Microsoft Word 将文件另存为 .docx 格式后再导入。')
+          return
+        }
         if (wordContentRef.current) {
           setWordHtml(wordContentRef.current)
         } else {
@@ -132,7 +150,6 @@ export default function DocumentPreview() {
       } else if (document.type === 'image') {
         const dataUrl = `data:image/${document.ext === 'jpg' || document.ext === 'jpeg' ? 'jpeg' : 'png'};base64,${document.data}`
         setImageUrl(dataUrl)
-        // 获取图片自然尺寸
         const img = new Image()
         img.onload = () => {
           if (mountedRef.current) {
@@ -251,7 +268,14 @@ export default function DocumentPreview() {
                 {error}
               </span>
               <span style={{ color: '#94a3b8', fontSize: 12 }}>
-                提示：Word 文档仅支持 .docx 格式，不支持旧版 .doc 格式
+                {document?.type === 'word'
+                  ? '提示：Word 文档仅支持 .docx 格式，不支持旧版 .doc 格式'
+                  : document?.type === 'excel'
+                    ? '提示：请确认文件为 .xlsx 或 .xls 格式，且未被加密保护'
+                    : document?.type === 'pdf'
+                      ? '提示：请确认 PDF 文件未损坏且未被加密'
+                      : '提示：请导入 PDF、Word (.docx)、Excel (.xlsx/.xls) 或图片文件'
+                }
               </span>
             </>
           )}
@@ -267,24 +291,54 @@ export default function DocumentPreview() {
   // Excel 文档 A4 分页预览
   if (excelHtml) {
     return (
-      <div style={{
-        width: pageW, height: pageH,
-        overflow: 'hidden',
-        background: '#fff',
-        position: 'relative'
-      }}>
-        <div
-          ref={excelMeasureRef}
-          className="excel-preview-container"
-          style={{
-            width: pageW,
-            padding: 20,
-            fontSize: 13, color: '#1e293b',
-            transform: `translateY(-${currentPage * pageH}px)`
-          }}
-          dangerouslySetInnerHTML={{ __html: excelHtml }}
-        />
-      </div>
+      <>
+        <style>{`
+          .excel-preview-container table {
+            border-collapse: collapse;
+            width: 100%;
+            table-layout: auto;
+          }
+          .excel-preview-container td, .excel-preview-container th {
+            border: 1px solid #d1d5db;
+            padding: 4px 8px;
+            font-size: 12px;
+            vertical-align: middle;
+            background: #ffffff;
+          }
+          .excel-preview-container th {
+            background: #f1f5f9;
+            font-weight: 600;
+            color: #334155;
+          }
+          .excel-preview-container .excel-sheet {
+            margin-bottom: 20px;
+          }
+          .excel-preview-container .excel-sheet:last-child {
+            margin-bottom: 0;
+          }
+          .excel-preview-container table tr:nth-child(even) td {
+            background: #fafbfc;
+          }
+        `}</style>
+        <div style={{
+          width: pageW, height: pageH,
+          overflow: 'hidden',
+          background: '#fff',
+          position: 'relative'
+        }}>
+          <div
+            ref={excelMeasureRef}
+            className="excel-preview-container"
+            style={{
+              width: pageW,
+              padding: 20,
+              fontSize: 13, color: '#1e293b',
+              transform: `translateY(-${currentPage * pageH}px)`
+            }}
+            dangerouslySetInnerHTML={{ __html: excelHtml }}
+          />
+        </div>
+      </>
     )
   }
 

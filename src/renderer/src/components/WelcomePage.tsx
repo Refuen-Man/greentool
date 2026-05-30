@@ -9,9 +9,9 @@ export default function WelcomePage() {
   const handleOpenDocument = async () => {
     try {
       const result = await window.electronAPI.openDocument()
-      if (!result) return
+      if (!result || !result.data) return
 
-      const ext = result.ext.toLowerCase()
+      const ext = (result.ext || '').toLowerCase()
       let docType: DocumentInfo['type']
       let pageCount = 1
 
@@ -21,6 +21,7 @@ export default function WelcomePage() {
         pageCount = pageResult.pageCount || 1
       } else if (ext === 'docx' || ext === 'doc') {
         docType = 'word'
+        // 旧版 .doc 直接在这里不阻止导入，但类型设为 word，由 DocumentPreview 精确提示
       } else if (ext === 'xlsx' || ext === 'xls') {
         docType = 'excel'
       } else {
@@ -81,7 +82,7 @@ export default function WelcomePage() {
         const doc: DocumentInfo = {
           path: result.path || filePath,
           name: result.name || file.name,
-          ext: result.ext || '',
+          ext: result.ext || ext || '',
           size: result.size || file.size,
           data: result.data,
           type: docType,
