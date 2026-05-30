@@ -32,6 +32,12 @@ export interface PdfPageCountResult {
   error?: string
 }
 
+export interface ExcelToPdfResult {
+  pdfData?: string
+  pageCount?: number
+  error?: string
+}
+
 export interface StampExportItem {
   imageBase64: string
   x: number
@@ -77,6 +83,9 @@ const api = {
 
   parseExcel: (base64Data: string): Promise<ExcelParseResult> =>
     ipcRenderer.invoke('document:parseExcel', base64Data),
+
+  excelToPdf: (base64Data: string, landscape: boolean): Promise<ExcelToPdfResult> =>
+    ipcRenderer.invoke('document:excelToPdf', base64Data, landscape),
 
   getPdfPageCount: (base64Data: string): Promise<PdfPageCountResult> =>
     ipcRenderer.invoke('document:getPdfPageCount', base64Data),
