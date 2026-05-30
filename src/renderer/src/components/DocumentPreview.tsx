@@ -310,12 +310,6 @@ export default function DocumentPreview() {
             font-weight: 600;
             color: #334155;
           }
-          .excel-preview-container .excel-sheet {
-            margin-bottom: 20px;
-          }
-          .excel-preview-container .excel-sheet:last-child {
-            margin-bottom: 0;
-          }
           .excel-preview-container table tr:nth-child(even) td {
             background: #fafbfc;
           }

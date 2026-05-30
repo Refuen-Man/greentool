@@ -118,14 +118,11 @@ ipcMain.handle('document:parseExcel', async (_event, base64Data: string) => {
     const workbook = XLSX.read(buffer, { type: 'buffer' })
     const sheetNames = workbook.SheetNames
 
-    // 将所有工作表转为 HTML
-    let html = ''
-    for (const name of sheetNames) {
-      const sheet = workbook.Sheets[name]
-      const sheetHtml = XLSX.utils.sheet_to_html(sheet, { id: '', editable: false })
-      html += `<div class="excel-sheet"><h3 style="margin:0 0 8px;font-size:14px;color:#475569">${name}</h3>${sheetHtml}</div>`
-    }
-    return { html, sheetCount: sheetNames.length }
+    // 仅处理第一个 sheet（默认页）
+    const firstSheetName = sheetNames[0]
+    const sheet = workbook.Sheets[firstSheetName]
+    const html = XLSX.utils.sheet_to_html(sheet, { id: '', editable: false })
+    return { html, sheetCount: 1 }
   } catch (err: any) {
     return { error: err.message || 'Excel 文档解析失败' }
   }

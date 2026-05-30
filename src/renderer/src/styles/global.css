@@ -317,14 +317,6 @@ html, body, #root {
   text-align: center;
 }
 
-.excel-preview-container .excel-sheet {
-  margin-bottom: 24px;
-}
-
-.excel-preview-container .excel-sheet:last-child {
-  margin-bottom: 0;
-}
-
 /* Word 文档内嵌表格 */
 .word-preview-container table {
   border-collapse: collapse;
