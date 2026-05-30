@@ -24,7 +24,7 @@ export default function WelcomePage() {
         // 旧版 .doc 直接在这里不阻止导入，但类型设为 word，由 DocumentPreview 精确提示
       } else if (ext === 'xlsx' || ext === 'xls') {
         // Excel → 转为 PDF 以保持完整样式
-        const pdfResult = await window.electronAPI.excelToPdf(result.data, true)
+        const pdfResult = await window.electronAPI.excelToPdf(result.data)
         if (pdfResult.pdfData && !pdfResult.error) {
           docType = 'pdf'
           result.data = pdfResult.pdfData
@@ -83,7 +83,7 @@ export default function WelcomePage() {
           docType = 'word'
         } else if (ext === 'xlsx' || ext === 'xls') {
           // Excel → 转为 PDF 以保持完整样式
-          const pdfResult = await window.electronAPI.excelToPdf(result.data, true)
+          const pdfResult = await window.electronAPI.excelToPdf(result.data)
           if (pdfResult.pdfData && !pdfResult.error) {
             docType = 'pdf'
             result.data = pdfResult.pdfData

@@ -84,8 +84,8 @@ const api = {
   parseExcel: (base64Data: string): Promise<ExcelParseResult> =>
     ipcRenderer.invoke('document:parseExcel', base64Data),
 
-  excelToPdf: (base64Data: string, landscape: boolean): Promise<ExcelToPdfResult> =>
-    ipcRenderer.invoke('document:excelToPdf', base64Data, landscape),
+  excelToPdf: (base64Data: string): Promise<ExcelToPdfResult> =>
+    ipcRenderer.invoke('document:excelToPdf', base64Data),
 
   getPdfPageCount: (base64Data: string): Promise<PdfPageCountResult> =>
     ipcRenderer.invoke('document:getPdfPageCount', base64Data),

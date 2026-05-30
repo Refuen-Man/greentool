@@ -3,3 +3,5 @@ dist/
 out/
 .vite/
 *.log
+resources/libreoffice/
+scripts/7za.exe
