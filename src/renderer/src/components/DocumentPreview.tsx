@@ -295,23 +295,6 @@ export default function DocumentPreview() {
         <style>{`
           .excel-preview-container table {
             border-collapse: collapse;
-            width: 100%;
-            table-layout: auto;
-          }
-          .excel-preview-container td, .excel-preview-container th {
-            border: 1px solid #d1d5db;
-            padding: 4px 8px;
-            font-size: 12px;
-            vertical-align: middle;
-            background: #ffffff;
-          }
-          .excel-preview-container th {
-            background: #f1f5f9;
-            font-weight: 600;
-            color: #334155;
-          }
-          .excel-preview-container table tr:nth-child(even) td {
-            background: #fafbfc;
           }
         `}</style>
         <div style={{

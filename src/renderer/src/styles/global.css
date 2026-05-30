@@ -290,31 +290,9 @@ html, body, #root {
 
 /* ====== Word/Excel 文档预览表格样式 ====== */
 
-/* Excel 表格 */
+/* Excel 表格 - 仅 border-collapse，样式由 xlsx 行内属性控制 */
 .excel-preview-container table {
   border-collapse: collapse;
-  width: auto;
-  min-width: 100%;
-}
-
-.excel-preview-container td,
-.excel-preview-container th {
-  border: 1px solid #d1d5db;
-  padding: 4px 8px;
-  font-size: 12px;
-  line-height: 1.5;
-  vertical-align: middle;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.excel-preview-container th {
-  background: #f1f5f9;
-  font-weight: 600;
-  color: #334155;
-  text-align: center;
 }
 
 /* Word 文档内嵌表格 */

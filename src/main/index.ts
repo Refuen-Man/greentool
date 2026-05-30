@@ -115,7 +115,7 @@ ipcMain.handle('document:parseWord', async (_event, base64Data: string) => {
 ipcMain.handle('document:parseExcel', async (_event, base64Data: string) => {
   try {
     const buffer = Buffer.from(base64Data, 'base64')
-    const workbook = XLSX.read(buffer, { type: 'buffer' })
+    const workbook = XLSX.read(buffer, { type: 'buffer', cellStyles: true })
     const sheetNames = workbook.SheetNames
 
     // 仅处理第一个 sheet（默认页）
