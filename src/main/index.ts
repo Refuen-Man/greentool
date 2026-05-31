@@ -14,19 +14,28 @@ let mainWindow: BrowserWindow | null = null
 function getLibreOfficePath(): string | null {
   // Production: 打包在 app resources/libreoffice/
   if (app.isPackaged) {
-    const prodPath = join(process.resourcesPath, 'libreoffice', 'LibreOfficePortable', 'App', 'libreoffice', 'program', 'soffice.exe')
-    if (existsSync(prodPath)) return prodPath
+    const winProd = join(process.resourcesPath, 'libreoffice', 'App', 'libreoffice', 'program', 'soffice.exe')
+    if (existsSync(winProd)) return winProd
+    const macProd = join(process.resourcesPath, 'libreoffice', 'LibreOffice.app', 'Contents', 'MacOS', 'soffice')
+    if (existsSync(macProd)) return macProd
   }
   // Development: 项目 resources/libreoffice/
-  const devPath = join(__dirname, '..', '..', 'resources', 'libreoffice', 'LibreOfficePortable', 'App', 'libreoffice', 'program', 'soffice.exe')
-  if (existsSync(devPath)) return devPath
+  const winDev = join(__dirname, '..', '..', 'resources', 'libreoffice', 'App', 'libreoffice', 'program', 'soffice.exe')
+  if (existsSync(winDev)) return winDev
+  const macDev = join(__dirname, '..', '..', 'resources', 'libreoffice', 'LibreOffice.app', 'Contents', 'MacOS', 'soffice')
+  if (existsSync(macDev)) return macDev
 
   // 系统安装的 LibreOffice
-  try {
-    const result = execFileSync('where', ['soffice.exe'], { encoding: 'utf8', timeout: 5000 })
-    const paths = result.trim().split('\r\n')
-    if (paths[0] && existsSync(paths[0].trim())) return paths[0].trim()
-  } catch {}
+  if (process.platform === 'win32') {
+    try {
+      const result = execFileSync('where', ['soffice.exe'], { encoding: 'utf8', timeout: 5000 })
+      const paths = result.trim().split('\r\n')
+      if (paths[0] && existsSync(paths[0].trim())) return paths[0].trim()
+    } catch {}
+  } else if (process.platform === 'darwin') {
+    const macSystem = '/Applications/LibreOffice.app/Contents/MacOS/soffice'
+    if (existsSync(macSystem)) return macSystem
+  }
 
   return null
 }
@@ -135,7 +144,88 @@ ipcMain.handle('document:parseWord', async (_event, base64Data: string) => {
   }
 })
 
-// 解析 Excel 文档为 HTML（降级方案，使用 sheet_to_html 基础渲染）
+// ============ Excel HTML 生成（保留列宽/行高/合并单元格/页面设置） ============
+
+function generateExcelHtml(sheet: XLSX.WorkSheet): string {
+  const ref = sheet['!ref']
+  if (!ref) return '<table><tr><td></td></tr></table>'
+
+  const range = XLSX.utils.decode_range(ref)
+  const merges: Array<{ s: { r: number; c: number }; e: { r: number; c: number } }> =
+    (sheet as any)['!merges'] || []
+  const cols: Array<{ wpx?: number; width?: number }> =
+    (sheet as any)['!cols'] || []
+  const rows: Array<{ hpx?: number; hpt?: number }> =
+    (sheet as any)['!rows'] || []
+
+  // 合并单元格覆盖集合
+  const covered = new Set<string>()
+  const mergeMap = new Map<string, { colspan: number; rowspan: number }>()
+  for (const m of merges) {
+    const key = XLSX.utils.encode_cell(m.s)
+    const colspan = m.e.c - m.s.c + 1
+    const rowspan = m.e.r - m.s.r + 1
+    mergeMap.set(key, { colspan, rowspan })
+    for (let r = m.s.r; r <= m.e.r; r++) {
+      for (let c = m.s.c; c <= m.e.c; c++) {
+        if (r !== m.s.r || c !== m.s.c) {
+          covered.add(XLSX.utils.encode_cell({ r, c }))
+        }
+      }
+    }
+  }
+
+  let html = '<table>'
+
+  // colgroup — 列宽
+  html += '<colgroup>'
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const ci = cols[c]
+    const w = Math.round(ci?.wpx || ci?.width || 64)
+    html += `<col style="width:${w}px">`
+  }
+  html += '</colgroup>'
+
+  // 行
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const ri = rows[r]
+    const rh = ri?.hpx || (ri?.hpt ? Math.round(ri.hpt * 1.333) : 0)
+    html += '<tr'
+    if (rh) html += ` style="height:${rh}px"`
+    html += '>'
+
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c })
+      if (covered.has(addr)) continue
+
+      const merge = mergeMap.get(addr)
+      const cell = sheet[addr]
+      let val = ''
+      if (cell) {
+        const tv = cell.w !== undefined ? cell.w : (cell.v !== undefined ? String(cell.v) : '')
+        val = String(tv ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+      }
+
+      html += '<td'
+      if (merge) {
+        if (merge.colspan > 1) html += ` colspan="${merge.colspan}"`
+        if (merge.rowspan > 1) html += ` rowspan="${merge.rowspan}"`
+      }
+      html += '>'
+      html += val || '&nbsp;'
+      html += '</td>'
+    }
+    html += '</tr>'
+  }
+
+  html += '</table>'
+  return html
+}
+
+// 解析 Excel 文档为 HTML（降级方案，保留列宽/行高/合并单元格和页面设置）
 ipcMain.handle('document:parseExcel', async (_event, base64Data: string) => {
   try {
     const buffer = Buffer.from(base64Data, 'base64')
@@ -143,8 +233,22 @@ ipcMain.handle('document:parseExcel', async (_event, base64Data: string) => {
     const sheetName = workbook.SheetNames[0]
     if (!sheetName) return { error: 'Excel 文件中没有工作表' }
     const sheet = workbook.Sheets[sheetName]
-    const html = XLSX.utils.sheet_to_html(sheet, { id: '', editable: false })
-    return { html, sheetCount: 1 }
+
+    const html = generateExcelHtml(sheet)
+
+    // 读取页面设置
+    const pageSetup = (sheet as any)['!pageSetup'] || {}
+    const margins = (sheet as any)['!margins'] || null
+
+    return {
+      html,
+      sheetCount: workbook.SheetNames.length,
+      pageSetup: {
+        orientation: pageSetup.orientation || 'portrait',
+        paperSize: pageSetup.paperSize || null
+      },
+      margins
+    }
   } catch (err: any) {
     return { error: err.message || 'Excel 文档解析失败' }
   }
@@ -188,17 +292,25 @@ ipcMain.handle('document:excelToPdf', async (_event, base64Data: string) => {
 
     const pdfBuffer = readFileSync(pdfPath)
 
-    // 获取页数
+    // 获取页数和页面方向
     let pageCount = 1
+    let orientation: 'portrait' | 'landscape' = 'portrait'
+    let pageWidth = 595
+    let pageHeight = 842
     try {
       const pdfDoc = await PDFDocument.load(pdfBuffer)
       pageCount = pdfDoc.getPageCount()
+      const page = pdfDoc.getPage(0)
+      const sz = page.getSize()
+      pageWidth = sz.width
+      pageHeight = sz.height
+      orientation = sz.width > sz.height ? 'landscape' : 'portrait'
     } catch {}
 
     // 清理临时文件
     try { unlinkSync(excelPath); unlinkSync(pdfPath); rmdirSync(tmpDir) } catch {}
 
-    return { pdfData: pdfBuffer.toString('base64'), pageCount }
+    return { pdfData: pdfBuffer.toString('base64'), pageCount, orientation, pageWidth, pageHeight }
   } catch (err: any) {
     return { error: err.message || 'Excel 转 PDF 失败' }
   }

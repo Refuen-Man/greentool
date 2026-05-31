@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Modal, Radio, Button, message, Progress, Space } from 'antd'
 import { ExportOutlined } from '@ant-design/icons'
 import { useAppStore } from '../store'
@@ -183,23 +183,104 @@ export default function ExportDialog() {
     setProgress(100)
   }
 
-  /** Word/Excel 导出为真正 PDF（渲染每页为图片，用 pdf-lib 合成） */
+  /** Word/Excel 导出为真正 PDF */
   const exportWordExcelAsPdf = async () => {
     const state = useAppStore.getState()
     const latestDoc = state.document
     const latestStamps = state.stamps
     const latestStampsOnCanvas = state.stampsOnCanvas
     const latestCurrentPage = state.currentPage
+    const latestExportSettings = state.exportSettings
     const a4Landscape = state.a4Landscape
     if (!latestDoc) return
     setProgress(10)
 
+    // --- Excel 路径：通过 LibreOffice 生成完美分页的 PDF + 印章叠加 ---
+    if (latestDoc.type === 'excel') {
+      setProgress(15)
+      const pdfResult = await window.electronAPI.excelToPdf(latestDoc.data)
+      if (!pdfResult.pdfData || pdfResult.error) {
+        message.error(pdfResult.error || 'Excel 转 PDF 失败，请确认 LibreOffice 已安装')
+        return
+      }
+
+      setProgress(30)
+
+      // 加载 LibreOffice 生成的 PDF
+      const pdfLoadedBytes = Uint8Array.from(atob(pdfResult.pdfData), (c) => c.charCodeAt(0))
+      const pdfDoc = await PDFDocument.load(pdfLoadedBytes)
+      const pdfPages = pdfDoc.getPages()
+      const totalPages = pdfPages.length
+
+      // 确定要导出的页面范围
+      const exportAll = latestExportSettings.allPages
+      const pageRange = exportAll
+        ? pdfPages.map((_, i) => i)
+        : [Math.min(latestCurrentPage, totalPages - 1)]
+
+      // 在每页上绘制印章
+      for (let pi = 0; pi < pageRange.length; pi++) {
+        const pageIdx = pageRange[pi]
+        const pdfPage = pdfPages[pageIdx]
+        const { width: pageW_pt, height: pageH_pt } = pdfPage.getSize()
+
+        const pageStamps = latestStampsOnCanvas.filter((sc) => sc.pageIndex === pageIdx)
+
+        for (const sc of pageStamps) {
+          const stamp = latestStamps.find((s) => s.id === sc.stampId)
+          if (!stamp) continue
+
+          // 坐标转换：预览像素 → PDF pt
+          const scaleX = pageW_pt / documentDisplayWidth
+          const scaleY = pageH_pt / documentDisplayHeight
+          const pdfW = sc.width * scaleX
+          const pdfH = sc.height * scaleY
+          const pdfX = sc.x * scaleX
+          const pdfY = pageH_pt - (sc.y + sc.height) * scaleY
+
+          try {
+            const imgBase64 = stamp.dataUrl.includes('base64,')
+              ? stamp.dataUrl.split('base64,')[1]
+              : stamp.dataUrl
+            const imgBytes = Uint8Array.from(atob(imgBase64), (c) => c.charCodeAt(0))
+            let embedded
+            try { embedded = await pdfDoc.embedPng(imgBytes) }
+            catch { embedded = await pdfDoc.embedJpg(imgBytes) }
+
+            pdfPage.drawImage(embedded, {
+              x: pdfX,
+              y: pdfY,
+              width: pdfW,
+              height: pdfH,
+              opacity: sc.opacity
+            })
+          } catch { console.warn('印章绘制失败:', stamp.name) }
+        }
+
+        setProgress(30 + Math.round(((pi + 1) / pageRange.length) * 55))
+      }
+
+      const pdfBytes = await pdfDoc.save()
+      const pdfBase64 = uint8ArrayToBase64(pdfBytes)
+
+      setProgress(85)
+      const saveResult = await window.electronAPI.saveFile(
+        pdfBase64,
+        `盖章_${latestDoc.name.replace(/\.[^.]+$/, '')}.pdf`,
+        [{ name: 'PDF 文件', extensions: ['pdf'] }]
+      )
+      if (saveResult.success) { message.success('PDF 导出成功!') }
+      else if (saveResult.error) { message.error(saveResult.error) }
+      setProgress(100)
+      return
+    }
+
+    // --- Word 路径：html2canvas 渲染 + 固定 A4 分页 ---
     const pageW = a4Landscape ? 1123 : 794
     const pageH = a4Landscape ? 794 : 1123
 
     // 克隆内容元素，去除分页 transform 以捕获完整内容
-    const previewSelector = latestDoc.type === 'excel' ? '.excel-preview-container' : '.word-preview-container'
-    const previewEl = window.document.querySelector(previewSelector) as HTMLElement | null
+    const previewEl = window.document.querySelector('.word-preview-container') as HTMLElement | null
     if (!previewEl) { message.error('无法获取文档预览'); return }
 
     const clone = previewEl.cloneNode(true) as HTMLElement

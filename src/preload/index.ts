@@ -24,6 +24,8 @@ export interface WordParseResult {
 export interface ExcelParseResult {
   html?: string
   sheetCount?: number
+  pageSetup?: { orientation?: string; paperSize?: number | null }
+  margins?: { left: number; right: number; top: number; bottom: number; header: number; footer: number } | null
   error?: string
 }
 
@@ -35,6 +37,9 @@ export interface PdfPageCountResult {
 export interface ExcelToPdfResult {
   pdfData?: string
   pageCount?: number
+  orientation?: 'portrait' | 'landscape'
+  pageWidth?: number
+  pageHeight?: number
   error?: string
 }
 

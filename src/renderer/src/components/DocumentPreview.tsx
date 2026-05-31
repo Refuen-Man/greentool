@@ -36,6 +36,10 @@ export default function DocumentPreview() {
   const wordMeasureRef = useRef<HTMLDivElement>(null)
   // Excel 内容容器引用
   const excelMeasureRef = useRef<HTMLDivElement>(null)
+  // Excel 页边距（来自 XLSX !margins，单位英寸）
+  const excelMarginsRef = useRef<any>(null)
+  // Excel 页面设置（orientation 等）
+  const excelPageSetupRef = useRef<{ orientation?: string } | null>(null)
 
   useEffect(() => {
     mountedRef.current = true
@@ -85,7 +89,6 @@ export default function DocumentPreview() {
     ) => {
       const el = ref.current
       if (!el) return
-      // 等待浏览器完成布局
       requestAnimationFrame(() => {
         const totalHeight = el.scrollHeight
         const pageCount = Math.max(1, Math.ceil(totalHeight / pageH))
@@ -120,8 +123,9 @@ export default function DocumentPreview() {
     setExcelHtml('')
     setError('')
 
-    // Word/Excel 文档直接设定 A4 尺寸，不等待 measure（避免 canvas-wrapper 尺寸为 0）
-    if (document.type === 'word' || document.type === 'excel') {
+    // Word 文档直接设定 A4 尺寸，不等待 measure（避免 canvas-wrapper 尺寸为 0）
+    // Excel 方向由页面设置决定，稍后在 renderExcel 中设置
+    if (document.type === 'word') {
       const pw = a4Landscape ? A4_LANDSCAPE_WIDTH : A4_PORTRAIT_WIDTH
       const ph = a4Landscape ? A4_LANDSCAPE_HEIGHT : A4_PORTRAIT_HEIGHT
       setDocumentNaturalSize(pw, ph)
@@ -243,15 +247,37 @@ export default function DocumentPreview() {
     }
     if (result.html) {
       excelContentRef.current = result.html
+      excelMarginsRef.current = result.margins || null
+      excelPageSetupRef.current = result.pageSetup || null
+
+      // 根据 Excel 页面设置自动切换横/竖版
+      const store = useAppStore.getState()
+      const orientation = result.pageSetup?.orientation
+      if (orientation === 'landscape' && !store.a4Landscape) {
+        store.setA4Landscape(true)
+      } else if (orientation === 'portrait' && store.a4Landscape) {
+        store.setA4Landscape(false)
+      }
+      // 设定正确的 A4 尺寸
+      const ls = orientation === 'landscape' || store.a4Landscape
+      const pw = ls ? A4_LANDSCAPE_WIDTH : A4_PORTRAIT_WIDTH
+      const ph = ls ? A4_LANDSCAPE_HEIGHT : A4_PORTRAIT_HEIGHT
+      setDocumentNaturalSize(pw, ph)
+
       setExcelHtml(result.html)
     }
   }
 
-  // 加载中或加载出错
-  if (loading || error) {
-    return (
-      <>
-        <canvas ref={renderCanvasRef} style={{ display: 'none' }} />
+  // 计算当前 A4 页面尺寸
+  const pageW = a4Landscape ? A4_LANDSCAPE_WIDTH : A4_PORTRAIT_WIDTH
+  const pageH = a4Landscape ? A4_LANDSCAPE_HEIGHT : A4_PORTRAIT_HEIGHT
+
+  // 渲染内容（canvas 始终在 DOM 中以支持 PDF 翻页重渲染）
+  return (
+    <>
+      <canvas ref={renderCanvasRef} style={{ display: 'none' }} />
+
+      {loading || error ? (
         <div style={{
           width: 800, minHeight: 600, display: 'flex',
           flexDirection: 'column', alignItems: 'center',
@@ -280,23 +306,32 @@ export default function DocumentPreview() {
             </>
           )}
         </div>
-      </>
-    )
-  }
-
-  // 计算当前 A4 页面尺寸
-  const pageW = a4Landscape ? A4_LANDSCAPE_WIDTH : A4_PORTRAIT_WIDTH
-  const pageH = a4Landscape ? A4_LANDSCAPE_HEIGHT : A4_PORTRAIT_HEIGHT
-
-  // Excel 文档 A4 分页预览
-  if (excelHtml) {
-    return (
-      <>
-        <style>{`
-          .excel-preview-container table {
-            border-collapse: collapse;
-          }
-        `}</style>
+      ) : excelHtml ? (
+        <>
+          <style>{`
+            .excel-preview-container table {
+              border-collapse: collapse;
+            }
+          `}</style>
+          <div style={{
+            width: pageW, height: pageH,
+            overflow: 'hidden',
+            background: '#fff',
+            position: 'relative'
+          }}>
+            <div
+              ref={excelMeasureRef}
+              className="excel-preview-container"
+              style={{
+                width: pageW,
+                padding: 20,
+                transform: `translateY(-${currentPage * pageH}px)`
+              }}
+              dangerouslySetInnerHTML={{ __html: excelHtml }}
+            />
+          </div>
+        </>
+      ) : wordHtml ? (
         <div style={{
           width: pageW, height: pageH,
           overflow: 'hidden',
@@ -304,80 +339,46 @@ export default function DocumentPreview() {
           position: 'relative'
         }}>
           <div
-            ref={excelMeasureRef}
-            className="excel-preview-container"
+            ref={wordMeasureRef}
+            className="word-preview-container"
             style={{
               width: pageW,
-              padding: 20,
+              padding: 40,
+              fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
+              fontSize: 14, lineHeight: 1.8, color: '#1e293b',
               transform: `translateY(-${currentPage * pageH}px)`
             }}
-            dangerouslySetInnerHTML={{ __html: excelHtml }}
+            dangerouslySetInnerHTML={{ __html: wordHtml }}
           />
         </div>
-      </>
-    )
-  }
-
-  // Word 文档 A4 分页预览
-  if (wordHtml) {
-    return (
-      <div style={{
-        width: pageW, height: pageH,
-        overflow: 'hidden',
-        background: '#fff',
-        position: 'relative'
-      }}>
-        <div
-          ref={wordMeasureRef}
-          className="word-preview-container"
-          style={{
-            width: pageW,
-            padding: 40,
-            fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
-            fontSize: 14, lineHeight: 1.8, color: '#1e293b',
-            transform: `translateY(-${currentPage * pageH}px)`
-          }}
-          dangerouslySetInnerHTML={{ __html: wordHtml }}
-        />
-      </div>
-    )
-  }
-
-  // 图片/PDF渲染预览
-  if (imageUrl) {
-    return (
-      <div style={{
-        position: 'relative',
-        background: '#fff',
-        lineHeight: 0,
-        width: documentDisplayWidth,
-        height: documentDisplayHeight,
-        overflow: 'hidden'
-      }}>
-        <img
-          className="doc-preview-image"
-          src={imageUrl}
-          alt="文档预览"
-          style={{ display: 'block', width: '100%', height: '100%', objectFit: 'contain' }}
-          draggable={false}
-        />
-      </div>
-    )
-  }
-
-  // 空状态 / 渲染失败
-  return (
-    <>
-      <canvas ref={renderCanvasRef} style={{ display: 'none' }} />
-      <div style={{
-        width: 800, height: 600, display: 'flex',
-        flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', background: '#fff',
-        color: '#94a3b8', gap: 12
-      }}>
-        <FilePdfOutlined style={{ fontSize: 48 }} />
-        <span>无法加载文档预览</span>
-      </div>
+      ) : imageUrl ? (
+        <div style={{
+          position: 'relative',
+          background: '#fff',
+          lineHeight: 0,
+          width: documentDisplayWidth,
+          height: documentDisplayHeight,
+          overflow: 'hidden'
+        }}>
+          <img
+            className="doc-preview-image"
+            src={imageUrl}
+            alt="文档预览"
+            style={{ display: 'block', width: '100%', height: '100%', objectFit: 'contain' }}
+            draggable={false}
+          />
+        </div>
+      ) : (
+        <div style={{
+          width: 800, height: 600, display: 'flex',
+          flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', background: '#fff',
+          color: '#94a3b8', gap: 12
+        }}>
+          <FilePdfOutlined style={{ fontSize: 48 }} />
+          <span>无法加载文档预览</span>
+        </div>
+      )}
     </>
   )
 }

@@ -146,15 +146,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   documentScale: 1,
   setDocumentNaturalSize: (w, h) => {
     const s = get()
-    const a4W = s.a4Landscape ? A4_LANDSCAPE_WIDTH : A4_PORTRAIT_WIDTH
-    const a4H = s.a4Landscape ? A4_LANDSCAPE_HEIGHT : A4_PORTRAIT_HEIGHT
+    // 根据自然尺寸宽高比自动判断横/竖版（PDF/图片文档），但手动切换过的保留用户选择
+    const landscape = s.a4Landscape || w > h
+    const a4W = landscape ? A4_LANDSCAPE_WIDTH : A4_PORTRAIT_WIDTH
+    const a4H = landscape ? A4_LANDSCAPE_HEIGHT : A4_PORTRAIT_HEIGHT
     const scale = Math.min(a4W / w, a4H / h)
     set({
       documentNaturalWidth: w,
       documentNaturalHeight: h,
       documentDisplayWidth: Math.round(w * scale),
       documentDisplayHeight: Math.round(h * scale),
-      documentScale: scale
+      documentScale: scale,
+      a4Landscape: landscape
     })
   },
   a4Landscape: false,

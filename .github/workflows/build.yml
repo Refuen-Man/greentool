@@ -27,6 +27,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Download LibreOffice (for Excel→PDF)
+        run: node scripts/download-libreoffice.js
+        timeout-minutes: 20
+
       - run: npm run build
 
       - name: Package (NSIS installer)
@@ -56,6 +60,10 @@ jobs:
           npm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download LibreOffice (for Excel→PDF)
+        run: node scripts/download-libreoffice.js
+        timeout-minutes: 20
 
       - run: npm run build
 

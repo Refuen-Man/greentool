@@ -1,5 +1,7 @@
 /**
- * 下载 LibreOffice Portable 并解压到 resources/libreoffice/
+ * 下载 LibreOffice 到 resources/libreoffice/
+ *   Windows: LibreOffice Portable (.paf.exe → 7z 解压)
+ *   macOS:   LibreOffice DMG → hdiutil 挂载 → 复制 .app
  * 用法: node scripts/download-libreoffice.js
  */
 const https = require('https')
@@ -7,21 +9,29 @@ const http = require('http')
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
+const os = require('os')
 
 const TARGET_DIR = path.join(__dirname, '..', 'resources', 'libreoffice')
-const TEMP_FILE = path.join(process.env.TEMP || '/tmp', 'LibreOfficePortable.paf.exe')
+const IS_WIN = process.platform === 'win32'
+const IS_MAC = process.platform === 'darwin'
 
-// 多个镜像源，逐个尝试（优先国内镜像）
-const MIRRORS = [
-  // 清华大学 TUNA 镜像 (最新 26.2.1)
+// ========== Windows 镜像 ==========
+const WIN_MIRRORS = [
   'https://mirrors.tuna.tsinghua.edu.cn/libreoffice/libreoffice/portable/26.2.1/LibreOfficePortable_26.2.1_MultilingualStandard.paf.exe',
-  // 中科大 USTC 镜像
   'https://mirrors.ustc.edu.cn/tdf/libreoffice/portable/26.2.1/LibreOfficePortable_26.2.1_MultilingualStandard.paf.exe',
-  // SourceForge 国际镜像 (备选)
   'https://newcontinuum.dl.sourceforge.net/project/portableapps/LibreOffice%20Portable/LibreOfficePortableLegacyWin7_25.2.7_MultilingualStandard.paf.exe',
   'https://netix.dl.sourceforge.net/project/portableapps/LibreOffice%20Portable/LibreOfficePortableLegacyWin7_25.2.7_MultilingualStandard.paf.exe',
-  'https://phoenixnap.dl.sourceforge.net/project/portableapps/LibreOffice%20Portable/LibreOfficePortableLegacyWin7_25.2.7_MultilingualStandard.paf.exe',
 ]
+
+// ========== macOS 镜像（Apple Silicon） ==========
+const MAC_MIRRORS = [
+  'https://mirrors.tuna.tsinghua.edu.cn/libreoffice/libreoffice/stable/26.2.1/mac/aarch64/LibreOffice_26.2.1_MacOS_aarch64.dmg',
+  'https://mirrors.ustc.edu.cn/tdf/libreoffice/stable/26.2.1/mac/aarch64/LibreOffice_26.2.1_MacOS_aarch64.dmg',
+]
+
+// ========== 验证目标文件 ==========
+const SOFFICE_WIN = path.join(TARGET_DIR, 'App', 'libreoffice', 'program', 'soffice.exe')
+const SOFFICE_MAC = path.join(TARGET_DIR, 'LibreOffice.app', 'Contents', 'MacOS', 'soffice')
 
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
@@ -29,14 +39,12 @@ function downloadFile(url, dest) {
     const protocol = url.startsWith('https') ? https : http
 
     console.log(`  连接: ${url}`)
-    const req = protocol.get(url, { 
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://mirrors.tuna.tsinghua.edu.cn/'
+    const req = protocol.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
       },
       timeout: 30000
     }, (res) => {
-      // 跟随重定向
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         file.close()
         fs.unlinkSync(dest)
@@ -88,14 +96,10 @@ function downloadFile(url, dest) {
 }
 
 async function extractPaf(pafPath, destDir) {
-  // .paf.exe 是 7z 自解压文件，用 7z/7za 解压
   console.log('  解压中...')
 
-  // 查找 7z 或 7za
   const sevenZipPaths = [
-    // 脚本自带的 7za.exe（独立版）
     path.join(__dirname, '7za.exe'),
-    // 系统安装的 7-Zip
     'C:\\Program Files\\7-Zip\\7z.exe',
     'C:\\Program Files (x86)\\7-Zip\\7z.exe',
     path.join(process.env['ProgramFiles'] || '', '7-Zip', '7z.exe'),
@@ -113,7 +117,6 @@ async function extractPaf(pafPath, destDir) {
       timeout: 300000
     })
   } else {
-    // 没有 7z，尝试直接运行 paf.exe 自解压（/D 指定目录，/SILENT 静默）
     console.log('  未找到 7-Zip，尝试自解压...')
     if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
     try {
@@ -127,71 +130,108 @@ async function extractPaf(pafPath, destDir) {
   }
 }
 
-async function main() {
-  console.log('=== 下载 LibreOffice Portable ===\n')
-
-  // 检查是否已存在
-  const sofficeExe = path.join(TARGET_DIR, 'LibreOfficePortable', 'App', 'libreoffice', 'program', 'soffice.exe')
-  if (fs.existsSync(sofficeExe)) {
-    console.log(`  LibreOffice 已存在于: ${sofficeExe}`)
-    console.log('  跳过下载。如需重新下载，请先删除 resources/libreoffice/ 目录。')
-    return
+async function extractDmg(dmgPath, destDir) {
+  console.log('  挂载 DMG...')
+  // 挂载 DMG
+  const mountResult = execSync(`hdiutil attach "${dmgPath}" -nobrowse -readonly`, {
+    encoding: 'utf8',
+    timeout: 60000
+  })
+  // 解析挂载点（通常是 /Volumes/LibreOffice）
+  const lines = mountResult.trim().split('\n')
+  const lastLine = lines[lines.length - 1] || ''
+  const parts = lastLine.split('\t')
+  const mountPoint = parts[parts.length - 1]?.trim()
+  if (!mountPoint || !fs.existsSync(mountPoint)) {
+    throw new Error('无法确定 DMG 挂载点: ' + mountResult)
   }
+  console.log(`  挂载点: ${mountPoint}`)
 
-  // 清理旧临时文件
-  if (fs.existsSync(TEMP_FILE)) fs.unlinkSync(TEMP_FILE)
+  // 查找 .app 并复制
+  const entries = fs.readdirSync(mountPoint).filter(f => f.endsWith('.app'))
+  if (entries.length === 0) throw new Error('DMG 中未找到 .app')
+  const appName = entries[0]
+  const srcApp = path.join(mountPoint, appName)
 
-  // 逐个尝试镜像
+  // 如果目标已存在，先删除
+  const destApp = path.join(destDir, 'LibreOffice.app')
+  if (fs.existsSync(destApp)) {
+    fs.rmSync(destApp, { recursive: true, force: true })
+  }
+  if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
+
+  console.log(`  复制 ${appName} → ${destApp}（可能需要几分钟）...`)
+  execSync(`cp -R "${srcApp}" "${destApp}"`, {
+    stdio: 'inherit',
+    timeout: 600000
+  })
+
+  // 卸载 DMG
+  console.log('  卸载 DMG...')
+  try { execSync(`hdiutil detach "${mountPoint}" -force`, { stdio: 'ignore' }) } catch {}
+}
+
+async function downloadAndExtract(mirrors, extractFn, tempPath) {
   let success = false
-  for (const mirror of MIRRORS) {
-    console.log(`尝试镜像: ${mirror.split('/')[2]}`)
+  for (const mirror of mirrors) {
+    console.log(`尝试镜像: ${new URL(mirror).hostname}`)
     try {
-      await downloadFile(mirror, TEMP_FILE)
-      const size = fs.statSync(TEMP_FILE).size
+      await downloadFile(mirror, tempPath)
+      const size = fs.statSync(tempPath).size
       if (size < 10 * 1024 * 1024) {
-        console.log(`  文件太小 (${(size/1024/1024).toFixed(1)}MB)，可能不是有效的安装包，尝试下一个镜像...`)
-        fs.unlinkSync(TEMP_FILE)
+        console.log(`  文件太小 (${(size/1024/1024).toFixed(1)}MB)，可能无效，尝试下一个镜像...`)
+        fs.unlinkSync(tempPath)
         continue
       }
       success = true
       break
     } catch (err) {
       console.log(`  失败: ${err.message}`)
-      if (fs.existsSync(TEMP_FILE)) fs.unlinkSync(TEMP_FILE)
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath)
     }
   }
+  if (!success) throw new Error('所有镜像下载失败')
 
-  if (!success) {
-    console.error('\n所有镜像下载失败。请手动下载 LibreOffice Portable 并解压到:')
-    console.error(`  ${TARGET_DIR}`)
-    console.error('下载地址: https://portableapps.com/apps/office/libreoffice_portable')
-    process.exit(1)
+  console.log('\n  下载完成！开始解压...')
+  await extractFn()
+  console.log('  解压完成！')
+}
+
+async function main() {
+  console.log(`=== 下载 LibreOffice (${process.platform}) ===\n`)
+
+  // 检查已存在
+  const verifyPath = IS_MAC ? SOFFICE_MAC : SOFFICE_WIN
+  if (fs.existsSync(verifyPath)) {
+    console.log(`  LibreOffice 已存在于: ${verifyPath}`)
+    console.log('  跳过下载。如需重新下载，请先删除 resources/libreoffice/ 目录。')
+    return
   }
 
-  console.log('\n  下载完成！')
-
-  // 解压
-  console.log('开始解压...')
-  try {
-    await extractPaf(TEMP_FILE, TARGET_DIR)
-    console.log('  解压完成！')
-  } catch (e) {
-    console.error(`解压失败: ${e.message}`)
-    console.error(`请手动解压 ${TEMP_FILE} 到 ${TARGET_DIR}`)
-    process.exit(1)
-  }
-
-  // 清理临时文件
-  if (fs.existsSync(TEMP_FILE)) fs.unlinkSync(TEMP_FILE)
-
-  // 验证
-  if (fs.existsSync(sofficeExe)) {
-    console.log(`\n✓ LibreOffice 就绪: ${sofficeExe}`)
+  if (IS_WIN) {
+    const tempFile = path.join(process.env.TEMP || os.tmpdir(), 'LibreOfficePortable.paf.exe')
+    if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile)
+    await downloadAndExtract(WIN_MIRRORS, () => extractPaf(tempFile, TARGET_DIR), tempFile)
+    if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile)
+    if (!fs.existsSync(SOFFICE_WIN)) {
+      console.error(`\n✗ 未找到 soffice.exe，解压可能不完整。期望: ${SOFFICE_WIN}`)
+      process.exit(1)
+    }
+  } else if (IS_MAC) {
+    const tempFile = path.join(os.tmpdir(), 'LibreOffice.dmg')
+    if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile)
+    await downloadAndExtract(MAC_MIRRORS, () => extractDmg(tempFile, TARGET_DIR), tempFile)
+    if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile)
+    if (!fs.existsSync(SOFFICE_MAC)) {
+      console.error(`\n✗ 未找到 soffice，解压可能不完整。期望: ${SOFFICE_MAC}`)
+      process.exit(1)
+    }
   } else {
-    console.error(`\n✗ 未找到 soffice.exe，解压可能不完整。`)
-    console.error(`  期望路径: ${sofficeExe}`)
+    console.error('当前平台不支持自动下载 LibreOffice，请手动安装。')
     process.exit(1)
   }
+
+  console.log(`\n✓ LibreOffice 就绪: ${verifyPath}`)
 }
 
 main().catch(err => {
