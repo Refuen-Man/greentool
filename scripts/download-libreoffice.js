@@ -15,18 +15,22 @@ const TARGET_DIR = path.join(__dirname, '..', 'resources', 'libreoffice')
 const IS_WIN = process.platform === 'win32'
 const IS_MAC = process.platform === 'darwin'
 
-// ========== Windows 镜像 ==========
+// ========== Windows 镜像（国内优先 + 官方备选） ==========
 const WIN_MIRRORS = [
   'https://mirrors.tuna.tsinghua.edu.cn/libreoffice/libreoffice/portable/26.2.1/LibreOfficePortable_26.2.1_MultilingualStandard.paf.exe',
   'https://mirrors.ustc.edu.cn/tdf/libreoffice/portable/26.2.1/LibreOfficePortable_26.2.1_MultilingualStandard.paf.exe',
-  'https://newcontinuum.dl.sourceforge.net/project/portableapps/LibreOffice%20Portable/LibreOfficePortableLegacyWin7_25.2.7_MultilingualStandard.paf.exe',
-  'https://netix.dl.sourceforge.net/project/portableapps/LibreOffice%20Portable/LibreOfficePortableLegacyWin7_25.2.7_MultilingualStandard.paf.exe',
+  // 官方 PortableApps 源（对于国外 CI runner 更可靠）
+  'https://newcontinuum.dl.sourceforge.net/project/portableapps/LibreOffice%20Portable/LibreOfficePortable_26.2.1_MultilingualStandard.paf.exe',
+  'https://netix.dl.sourceforge.net/project/portableapps/LibreOffice%20Portable/LibreOfficePortable_26.2.1_MultilingualStandard.paf.exe',
 ]
 
-// ========== macOS 镜像（Apple Silicon） ==========
+// ========== macOS 镜像（国内优先 + 官方备选） ==========
 const MAC_MIRRORS = [
   'https://mirrors.tuna.tsinghua.edu.cn/libreoffice/libreoffice/stable/26.2.1/mac/aarch64/LibreOffice_26.2.1_MacOS_aarch64.dmg',
   'https://mirrors.ustc.edu.cn/tdf/libreoffice/stable/26.2.1/mac/aarch64/LibreOffice_26.2.1_MacOS_aarch64.dmg',
+  // 官方 TDF 镜像（对于国外 CI runner 更可靠）
+  'https://download.documentfoundation.org/libreoffice/stable/26.2.1/mac/aarch64/LibreOffice_26.2.1_MacOS_aarch64.dmg',
+  'https://downloadarchive.documentfoundation.org/libreoffice/old/26.2.1/mac/aarch64/LibreOffice_26.2.1_MacOS_aarch64.dmg',
 ]
 
 // ========== 验证目标文件 ==========
@@ -99,10 +103,13 @@ async function extractPaf(pafPath, destDir) {
   console.log('  解压中...')
 
   const sevenZipPaths = [
-    path.join(__dirname, '7za.exe'),
+    // GitHub Actions Windows runner 自带的 7z
     'C:\\Program Files\\7-Zip\\7z.exe',
     'C:\\Program Files (x86)\\7-Zip\\7z.exe',
     path.join(process.env['ProgramFiles'] || '', '7-Zip', '7z.exe'),
+    path.join(process.env['ProgramW6432'] || '', '7-Zip', '7z.exe'),
+    // 本地开发：脚本同目录的 7za.exe
+    path.join(__dirname, '7za.exe'),
   ]
 
   let sevenZip = null
