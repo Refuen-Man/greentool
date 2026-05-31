@@ -27,8 +27,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download LibreOffice (for Excel→PDF)
-        run: node scripts/download-libreoffice.js
+      - name: Download LibreOffice (Excel→PDF)
+        run: |
+          $url = "https://download.documentfoundation.org/libreoffice/portable/26.2.1/LibreOfficePortable_26.2.1_MultilingualStandard.paf.exe"
+          $out = "$env:RUNNER_TEMP\lo.paf.exe"
+          Write-Host "Downloading LibreOffice Portable..."
+          Invoke-WebRequest -Uri $url -OutFile $out -TimeoutSec 600
+          Write-Host "Extracting with 7-Zip..."
+          & "C:\Program Files\7-Zip\7z.exe" x $out -o"resources\libreoffice" -y
+          Remove-Item $out
+          Write-Host "Verifying..."
+          if (Test-Path "resources\libreoffice\App\libreoffice\program\soffice.exe") {
+            Write-Host "LibreOffice OK"
+          } else {
+            Write-Host "soffice.exe not found, checking contents..."
+            Get-ChildItem resources\libreoffice -Recurse -Depth 2 | ForEach-Object { $_.FullName }
+            throw "LibreOffice extraction failed"
+          }
+        shell: pwsh
         timeout-minutes: 20
 
       - run: npm run build
@@ -61,8 +77,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download LibreOffice (for Excel→PDF)
-        run: node scripts/download-libreoffice.js
+      - name: Bundle LibreOffice (Excel→PDF)
+        run: |
+          set -e
+          echo "Installing LibreOffice via Homebrew..."
+          brew install --cask libreoffice
+          mkdir -p resources/libreoffice
+          echo "Copying LibreOffice.app..."
+          cp -R /Applications/LibreOffice.app resources/libreoffice/
+          echo "Verifying..."
+          if [ -f "resources/libreoffice/LibreOffice.app/Contents/MacOS/soffice" ]; then
+            echo "LibreOffice OK"
+          else
+            ls -la resources/libreoffice/
+            echo "ERROR: soffice not found"
+            exit 1
+          fi
         timeout-minutes: 20
 
       - run: npm run build

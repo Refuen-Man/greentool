@@ -5,3 +5,4 @@ out/
 *.log
 resources/libreoffice/
 scripts/7za.exe
+resources/
